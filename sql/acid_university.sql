@@ -386,7 +386,7 @@ WITH CHECK OPTION;
 GO
 
 -- Faculty Profile View
-CREATE VIEW dbo.Student_FacultyProfileView
+CREATE VIEW dbo.FacultyViewOfStudentProfile
 WITH SCHEMABINDING
 AS
 SELECT s.studentID, s.fname, s.lname, s.year, s.major, s.email
@@ -409,10 +409,26 @@ ON e.staffID = st.staffID
 WITH CHECK OPTION;
 GO
 
+CREATE VIEW dbo.FacultyProfileView
+WITH SCHEMABINDING
+AS
+SELECT s.staffID, s.fname, s.lname, s.dept, s.date_of_birth, s.email, sp.phone_number, sa.street_number, sa.city, sa.town
+FROM dbo.Staff AS s JOIN dbo.StaffPhone AS sp
+ON s.staffID = sp.staffID
+JOIN dbo.StaffAddress AS sa
+ON s.staffID = sa.staffID
+WITH CHECK OPTION;
+GO
+
+
 -- QUERIES --
 
 -- FUNCTIONS
 -- create function to view student details. Can be done by both staff and students, but view is different
+IF OBJECT_ID(N'viewStudentDetails_Student', N'IF') IS NOT NULL
+DROP FUNCTION viewStudentDetails_Student;
+GO
+
 CREATE FUNCTION viewStudentDetails_Student(@ID INT)
 RETURNS TABLE
 AS RETURN
@@ -421,12 +437,20 @@ AS RETURN
 	WHERE StudentProfileView.studentID = @ID
 GO
 
+IF OBJECT_ID(N'viewStudentDetails_Faculty', N'IF') IS NOT NULL
+DROP FUNCTION viewStudentDetails_Faculty;
+GO
+
 CREATE FUNCTION viewStudentDetails_Faculty(@ID INT)
 RETURNS TABLE
 AS RETURN
 	SELECT studentID, fname, lname, year, major, email
-	FROM Student_FacultyProfileView
-	WHERE Student_FacultyProfileView.studentID = @ID
+	FROM FacultyViewOfStudentProfile
+	WHERE FacultyViewOfStudentProfile.studentID = @ID
+GO
+
+IF OBJECT_ID(N'viewStudentEnrollmentDetails', N'IF') IS NOT NULL
+DROP FUNCTION viewStudentEnrollmentDetails;
 GO
 
 -- function to view student enrollment details
@@ -439,11 +463,29 @@ RETURN (
 );
 GO
 
+--Faculty
+IF OBJECT_ID(N'viewFacultyDetails', N'IF') IS NOT NULL
+DROP FUNCTION viewFacultyDetails;
+GO
+
+CREATE FUNCTION viewFacultyDetails(@ID INT)
+RETURNS TABLE
+AS RETURN
+	SELECT staffID, fname, lname, dept, date_of_birth, email, phone_number, street_number, city, town
+	FROM FacultyProfileView
+	WHERE FacultyProfileView.staffID = @ID
+GO
+
+
 -- PROCEDURES
 
 --create inline function to un-enroll and enroll students from a course. Querying the tables directly because
 -- the operation is a privileged operation. Only the academic registry can do it
 -- un-enrolling
+IF OBJECT_ID('unenroll', 'P') IS NOT NULL
+DROP PROC unenroll;
+GO
+
 CREATE PROCEDURE unenroll
 	@studentID AS INT,
 	@courseID AS INT,
@@ -465,6 +507,10 @@ END
 GO
 
 -- enrolling
+IF OBJECT_ID('enroll', 'P') IS NOT NULL
+DROP PROC enroll;
+GO
+
 CREATE PROCEDURE enroll
 	@studentID AS INT,
 	@courseID AS INT,
@@ -486,6 +532,10 @@ GO
 
 
 -- stored procedure to update student first name
+IF OBJECT_ID('updateStudentFirstName', 'P') IS NOT NULL
+DROP PROC updateStudentFirstName;
+GO
+
 CREATE PROCEDURE updateStudentFirstName
 	@studentID AS INT,
 	@fname AS VARCHAR(50),
@@ -500,6 +550,10 @@ END
 GO
 
 -- stored procedure to update student last name
+IF OBJECT_ID('updateStudentLastName', 'P') IS NOT NULL
+DROP PROC updateStudentLastName;
+GO
+
 CREATE PROCEDURE updateStudentLastName
 	@studentID AS INT,
 	@lname AS VARCHAR(50),
@@ -513,6 +567,10 @@ END
 GO
 
 -- stored procedure to update student phone number
+IF OBJECT_ID('updateStudentPhoneNumber', 'P') IS NOT NULL
+DROP PROC updateStudentPhoneNumber;
+GO
+
 CREATE PROCEDURE updateStudentPhoneNumber
 	@studentID AS INT,
 	@phoneNumber AS VARCHAR(20),
@@ -526,6 +584,10 @@ END
 GO
 
 -- procedure to update student address
+IF OBJECT_ID('updateStudentAddress', 'P') IS NOT NULL
+DROP PROC updateStudentAddress;
+GO
+
 CREATE PROCEDURE updateStudentAddress
 	@studentID AS INT='',
 	@postalAddress AS VARCHAR(100)='',
@@ -554,13 +616,50 @@ BEGIN  -- using IF statements because T-SQL case statements don't support fall-t
 END
 GO
 
+IF OBJECT_ID('viewStudentDetails', 'P') IS NOT NULL
+DROP PROC viewStudentDetails;
+GO
+
 CREATE PROCEDURE viewStudentDetails 
 	@ID AS INT,
 	@isStudent AS BIT = 0
 AS
 BEGIN
+	SET NOCOUNT ON;
 	IF @isStudent = 0
 		SELECT * FROM viewStudentDetails_Faculty(@ID)
 	ELSE 
 		SELECT * FROM viewStudentDetails_Student(@ID)
+END
+
+IF OBJECT_ID('viewLecturerHistory', 'P') IS NOT NULL
+DROP PROC viewLecturerHistory;
+GO
+
+CREATE PROCEDURE viewLecturerHistory 
+	@startDate AS DATETIME = '19850101'
+AS
+BEGIN
+	SET NOCOUNT ON;
+	SELECT CONCAT(s.fname, ' ', s.lname) AS Fullname, s.dept AS Department, l.date_started AS 'Date started'
+	FROM Staff s
+	INNER JOIN Lecturer l ON s.staffID = l.staffID
+	WHERE l.date_started >= @startDate;
+END
+GO
+
+IF OBJECT_ID('FacultyDetails', 'P') IS NOT NULL
+DROP PROC FacultyDetails;
+GO
+
+CREATE PROCEDURE FacultyDetails 
+	@ID AS INT,
+	@isFaculty AS BIT = 0
+AS
+BEGIN
+	SET NOCOUNT ON;
+	IF @isFaculty = 1
+		SELECT * FROM viewFacultyDetails(@ID)
+	ELSE 
+		THROW 50000, 'Only faculty are allowed to view this information', 0;
 END

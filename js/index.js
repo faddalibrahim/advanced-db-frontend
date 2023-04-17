@@ -17,12 +17,16 @@ document.addEventListener("DOMContentLoaded", () => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(loginData),
-    }).then((res) => {
-      if (res.status === 200) {
-        window.location.href = "http://localhost:3000/dashboard";
-      } else {
-        console.log("Invalid Credentials");
-      }
-    });
+    })
+      .then((res) => res.json())
+      .then((result) => {
+        if (result.successful) {
+          sessionStorage.setItem("acid_token", atob(result));
+          sessionStorage.setItem("acid_user", JSON.stringify(result.data));
+          window.location.replace("dashboard.html");
+        } else {
+          alert(result.message);
+        }
+      });
   });
 });
